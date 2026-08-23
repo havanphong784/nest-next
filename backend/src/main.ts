@@ -5,17 +5,12 @@ import { AppModule } from './app.module.js';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  const preferredPorts = [
-    Number(process.env.PORT) || 3000,
-    3001,
-    3002,
-    3003,
-    3004,
-    3005,
-  ];
 
+  app.enableCors({
+    origin: process.env.FRONTEND_URL,
+    credentials: true,
+  });
   app.setGlobalPrefix('api/v1');
-
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -23,6 +18,8 @@ async function bootstrap() {
       transform: true,
     }),
   );
+
+  const preferredPorts = [Number(process.env.PORT) || 5001, 5002, 5003];
 
   for (const port of preferredPorts) {
     try {

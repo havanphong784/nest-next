@@ -13,13 +13,14 @@ datasource db {
 }
 
 model User {
-  id           Int      @id @default(autoincrement())
-  fullname     String
-  email        String   @unique
-  passwordHash String
-  phone        String?
-  role         String   @default("Customer")
-  createdAt    DateTime @default(now())
+  id               Int      @id @default(autoincrement())
+  fullname         String
+  email            String   @unique
+  passwordHash     String
+  refreshTokenHash String?
+  phone            String?
+  role             String   @default("Customer")
+  createdAt        DateTime @default(now())
 
   addresses Address[]
   orders    Order[]
