@@ -70,11 +70,11 @@ export class AuthService {
       throw new UnauthorizedException('Email hoặc mật khẩu không đúng');
     }
 
-    const passwordMattcher = await argon2.verify(
+    const passwordMatches = await argon2.verify(
       user.passwordHash,
       dto.password,
     );
-    if (!passwordMattcher) {
+    if (!passwordMatches) {
       throw new UnauthorizedException('Email hoặc mật khẩu không đúng');
     }
 
@@ -103,30 +103,90 @@ export class AuthService {
         role: user.role,
         createdAt: user.createdAt,
       },
-      accessToken: accessToken,
-      refreshToken: refreshToken,
+      accessToken,
+      refreshToken,
     };
   }
 
   private async signRefreshToken(payload: JwtPayload) {
     const secret = this.configService.getOrThrow<string>('JWT_REFRESH_SECRET');
-    const expriresIn = this.configService.getOrThrow<SignOptions['expiresIn']>(
+    const expiresIn = this.configService.getOrThrow<SignOptions['expiresIn']>(
       'JWT_REFRESH_EXPIRES_IN',
     );
-    return this.jwtService.signAsync(payload as object, {
+    return this.jwtService.signAsync(payload, {
       secret: secret,
-      expiresIn: expriresIn,
+      expiresIn: expiresIn,
     });
   }
 
   private async signAccessToken(payload: JwtPayload) {
     const secret = this.configService.getOrThrow<string>('JWT_ACCESS_SECRET');
-    const expriresIn = this.configService.getOrThrow<SignOptions['expiresIn']>(
+    const expiresIn = this.configService.getOrThrow<SignOptions['expiresIn']>(
       'JWT_ACCESS_EXPIRES_IN',
     );
-    return this.jwtService.signAsync(payload as object, {
-      secret: secret,
-      expiresIn: expriresIn,
+    return this.jwtService.signAsync(payload, {
+      secret,
+      expiresIn,
     });
+  }
+
+  async refresh(refreshToken: string) {
+    const secret: string = this.configService.getOrThrow('JWT_REFRESH_SECRET');
+    let payload: JwtPayload;
+    try {
+      payload = await this.jwtService.verifyAsync<JwtPayload>(refreshToken, {
+        secret,
+      });
+    } catch {
+      throw new UnauthorizedException(
+        'Refresh token không hợp lệ hoặc đã hết hạn',
+      );
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: payload.sub },
+    });
+    if (!user || !user.refreshTokenHash) {
+      throw new UnauthorizedException(
+        'Phiên đăng nhập không hợp lệ hoặc không tồn tại',
+      );
+    }
+
+    const refreshTokenMatches = await argon2.verify(
+      user.refreshTokenHash,
+      refreshToken,
+    );
+    if (!refreshTokenMatches) {
+      throw new UnauthorizedException('Refresh token không hợp lệ');
+    }
+
+    const newPayload: JwtPayload = {
+      sub: user.id,
+      email: user.email,
+      role: user.role,
+    };
+
+    const [newAccessToken, newRefreshToken] = await Promise.all([
+      this.signAccessToken(newPayload),
+      this.signRefreshToken(newPayload),
+    ]);
+    const newRefreshTokenHash = await argon2.hash(newRefreshToken);
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { refreshTokenHash: newRefreshTokenHash },
+    });
+
+    return {
+      accessToken: newAccessToken,
+      refreshToken: newRefreshToken,
+      user: {
+        id: user.id,
+        fullname: user.fullname,
+        email: user.email,
+        phone: user.phone,
+        role: user.role,
+        createdAt: user.createdAt,
+      },
+    };
   }
 }
