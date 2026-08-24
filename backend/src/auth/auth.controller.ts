@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  HttpCode,
   Post,
   Req,
   Res,
@@ -37,20 +38,6 @@ export class AuthController {
     };
   }
 
-  private setRefreshTokenCookie(response: Response, refreshToken: string) {
-    const maxAge = Number(
-      this.configService.getOrThrow<string>('JWT_REFRESH_COOKIE_MAX_AGE_MS'),
-    );
-
-    response.cookie('refreshToken', refreshToken, {
-      httpOnly: true,
-      secure: this.configService.get<string>('NODE_ENV') === 'production',
-      sameSite: 'lax',
-      maxAge,
-      path: '/api/v1/auth',
-    });
-  }
-
   @Post('refresh')
   async refresh(
     @Req() request: Request,
@@ -68,5 +55,42 @@ export class AuthController {
       user: result.user,
       accessToken: result.accessToken,
     };
+  }
+
+  @Post('logout')
+  @HttpCode(204)
+  async logout(
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const refreshToken: unknown = request.cookies?.refreshToken;
+    if (typeof refreshToken === 'string') {
+      await this.authService.logout(refreshToken);
+    }
+
+    this.clearRefreshTokenCookie(response);
+  }
+
+  private clearRefreshTokenCookie(response: Response) {
+    response.clearCookie('refreshToken', {
+      httpOnly: true,
+      secure: this.configService.get<string>('NODE_ENV') === 'production',
+      sameSite: 'lax',
+      path: '/api/v1/auth',
+    });
+  }
+
+  private setRefreshTokenCookie(response: Response, refreshToken: string) {
+    const maxAge = Number(
+      this.configService.getOrThrow<string>('JWT_REFRESH_COOKIE_MAX_AGE_MS'),
+    );
+
+    response.cookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: this.configService.get<string>('NODE_ENV') === 'production',
+      sameSite: 'lax',
+      maxAge,
+      path: '/api/v1/auth',
+    });
   }
 }

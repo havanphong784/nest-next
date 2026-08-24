@@ -108,28 +108,6 @@ export class AuthService {
     };
   }
 
-  private async signRefreshToken(payload: JwtPayload) {
-    const secret = this.configService.getOrThrow<string>('JWT_REFRESH_SECRET');
-    const expiresIn = this.configService.getOrThrow<SignOptions['expiresIn']>(
-      'JWT_REFRESH_EXPIRES_IN',
-    );
-    return this.jwtService.signAsync(payload, {
-      secret: secret,
-      expiresIn: expiresIn,
-    });
-  }
-
-  private async signAccessToken(payload: JwtPayload) {
-    const secret = this.configService.getOrThrow<string>('JWT_ACCESS_SECRET');
-    const expiresIn = this.configService.getOrThrow<SignOptions['expiresIn']>(
-      'JWT_ACCESS_EXPIRES_IN',
-    );
-    return this.jwtService.signAsync(payload, {
-      secret,
-      expiresIn,
-    });
-  }
-
   async refresh(refreshToken: string) {
     const secret: string = this.configService.getOrThrow('JWT_REFRESH_SECRET');
     let payload: JwtPayload;
@@ -188,5 +166,65 @@ export class AuthService {
         createdAt: user.createdAt,
       },
     };
+  }
+
+  async logout(refreshToken: string) {
+    const secret = this.configService.getOrThrow<string>('JWT_REFRESH_SECRET');
+    let payload: JwtPayload;
+    try {
+      payload = await this.jwtService.verifyAsync<JwtPayload>(refreshToken, {
+        secret,
+      });
+    } catch {
+      return;
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: payload.sub },
+      select: { id: true, refreshTokenHash: true },
+    });
+
+    if (!user?.refreshTokenHash) {
+      return;
+    }
+
+    const refreshTokenMatches = await argon2.verify(
+      user.refreshTokenHash,
+      refreshToken,
+    );
+    if (!refreshTokenMatches) {
+      return;
+    }
+
+    await this.prisma.user.update({
+      where: {
+        id: user.id,
+      },
+      data: {
+        refreshTokenHash: null,
+      },
+    });
+  }
+
+  private async signRefreshToken(payload: JwtPayload) {
+    const secret = this.configService.getOrThrow<string>('JWT_REFRESH_SECRET');
+    const expiresIn = this.configService.getOrThrow<SignOptions['expiresIn']>(
+      'JWT_REFRESH_EXPIRES_IN',
+    );
+    return this.jwtService.signAsync(payload, {
+      secret: secret,
+      expiresIn: expiresIn,
+    });
+  }
+
+  private async signAccessToken(payload: JwtPayload) {
+    const secret = this.configService.getOrThrow<string>('JWT_ACCESS_SECRET');
+    const expiresIn = this.configService.getOrThrow<SignOptions['expiresIn']>(
+      'JWT_ACCESS_EXPIRES_IN',
+    );
+    return this.jwtService.signAsync(payload, {
+      secret,
+      expiresIn,
+    });
   }
 }
