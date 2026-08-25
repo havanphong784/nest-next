@@ -168,6 +168,26 @@ export class AuthService {
     };
   }
 
+  async getMe(userId: number) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        fullname: true,
+        email: true,
+        phone: true,
+        role: true,
+        createdAt: true,
+      },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('Người dùng không tồn tại');
+    }
+
+    return user;
+  }
+
   async logout(refreshToken: string) {
     const secret = this.configService.getOrThrow<string>('JWT_REFRESH_SECRET');
     let payload: JwtPayload;
