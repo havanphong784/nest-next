@@ -14,12 +14,9 @@ import { RegisterDto } from './dto/register.dto.js';
 import { LoginDto } from './dto/login.dto.js';
 import { ConfigService } from '@nestjs/config';
 import type { Request, Response } from 'express';
-import { JwtAuthGuard } from './strategies/jwt.strategy.js';
-import { AuthenticatedUser } from './entities/authenticated-user.entity.js';
-
-type AuthenticatedRequest = Request & {
-  user: AuthenticatedUser;
-};
+import type { AuthenticatedUser } from './entities/authenticated-user.entity.js';
+import { JwtAuthGuard } from './strategies/jwt-auth.guard.js';
+import { CurrentUser } from './decorator/current-user.decorator.js';
 
 @Controller('auth')
 export class AuthController {
@@ -79,10 +76,10 @@ export class AuthController {
     this.clearRefreshTokenCookie(response);
   }
 
-  @UseGuards(JwtAuthGuard)
   @Get('me')
-  async me(@Req() req: AuthenticatedRequest) {
-    return await this.authService.getMe(req.user.id);
+  @UseGuards(JwtAuthGuard)
+  me(@CurrentUser() user: AuthenticatedUser) {
+    return this.authService.getMe(user.id);
   }
 
   private clearRefreshTokenCookie(response: Response) {
