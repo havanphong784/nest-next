@@ -1,7 +1,12 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { Category } from '../../generated/prisma/client.js';
 import { CreateCategoryDto } from './dto/create-category.dto.js';
+import { UpdateCategoryDto } from './dto/update-category.dto.js';
 
 export type CategoryTreeNode = Category & {
   subCategory: CategoryTreeNode[];
@@ -34,6 +39,90 @@ export class CategoryService {
       include: {
         parent: true,
       },
+    });
+  }
+
+  async findOne(id: number) {
+    const category = await this.prismaService.category.findUnique({
+      where: { id },
+      include: {
+        parent: true,
+        subCategory: true,
+        _count: {
+          select: { products: true },
+        },
+      },
+    });
+
+    if (!category) {
+      throw new NotFoundException(`Danh mục với ID ${id} không tồn tại`);
+    }
+
+    return category;
+  }
+
+  async update(id: number, dto: UpdateCategoryDto) {
+    await this.ensureCategoryExists(id, `Danh mục với ID ${id} không tồn tại`);
+
+    if (dto.parentId !== undefined) {
+      if (dto.parentId === id) {
+        throw new BadRequestException('Danh mục không thể là cha của chính nó');
+      }
+
+      if (dto.parentId !== null) {
+        await this.ensureCategoryExists(
+          dto.parentId,
+          'Danh mục cha không tồn tại',
+        );
+      }
+    }
+
+    return this.prismaService.category.update({
+      where: { id },
+      data: {
+        ...(dto.name !== undefined && { name: dto.name.trim() }),
+        ...(dto.description !== undefined && {
+          description: dto.description?.trim(),
+        }),
+        ...(dto.parentId !== undefined && { parentId: dto.parentId }),
+      },
+      include: {
+        parent: true,
+      },
+    });
+  }
+
+  async remove(id: number) {
+    const category = await this.prismaService.category.findUnique({
+      where: { id },
+      include: {
+        _count: {
+          select: {
+            subCategory: true,
+            products: true,
+          },
+        },
+      },
+    });
+
+    if (!category) {
+      throw new NotFoundException(`Danh mục với ID ${id} không tồn tại`);
+    }
+
+    if (category._count.subCategory > 0) {
+      throw new BadRequestException(
+        'Không thể xóa danh mục đang chứa danh mục con. Hãy xóa hoặc điều chuyển danh mục con trước.',
+      );
+    }
+
+    if (category._count.products > 0) {
+      throw new BadRequestException(
+        'Không thể xóa danh mục đang có sản phẩm liên kết. Hãy xóa hoặc gỡ sản phẩm trước.',
+      );
+    }
+
+    return this.prismaService.category.delete({
+      where: { id },
     });
   }
 
